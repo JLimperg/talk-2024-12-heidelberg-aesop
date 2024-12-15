@@ -1,0 +1,819 @@
+\usepackage{fontspec}
+\usepackage{mathtools}
+\usepackage{unicode-math}
+\usepackage{tikz}
+\usetikzlibrary{trees}
+\usepackage{mathpartir}
+\usepackage{parskip}
+\usepackage{minted}
+\usepackage{csquotes}
+\usepackage{tcolorbox}
+\usepackage{biblatex} % TODO style w/o quotation marks
+\usepackage{siunitx}
+\usepackage{booktabs}
+
+\setmainfont{XITS}
+\setmathfont{XITS Math}
+\setsansfont[Scale=MatchLowercase]{DejaVu Sans}
+\setmonofont[Scale=MatchLowercase]{DejaVu Sans Mono}
+
+\addbibresource{lit.bib}
+
+% Emoji images are from
+% https://github.com/joypixels/emoji-assets/blob/master/png/128
+\newlength{\emojiheight}
+\settoheight{\emojiheight}{H}
+\newcommand{\good}{\includegraphics[height=\emojiheight]{images/1f973}}
+\newcommand{\bad}{\includegraphics[height=\emojiheight]{images/1fae4}}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize item}{\Large\textbullet}
+\setbeamertemplate{itemize subitem}{\Large\textbullet}
+\setbeamertemplate{itemize subsubitem}{\Large\textbullet}
+
+\tcbset{frame empty}
+
+\setminted[lean4]{extrakeywords={aesop cases add aesop? intro simp simp_all only split apply on_goal next rename_i safe unsafe norm constructors forward destruct norm_num done add_aesop_rules rfl subst ext}}
+\newmintinline[lean]{lean4}{bgcolor={},ignorelexererrors=true}
+\newminted[leancode]{lean4}{bgcolor={},ignorelexererrors=true,fontsize=\footnotesize,autogobble}
+\BeforeBeginEnvironment{leancode}{\begin{tcolorbox}}
+\AfterEndEnvironment{leancode}{\end{tcolorbox}}
+\usemintedstyle{xcode}
+
+\setlength{\parskip}{1em}
+\setlength{\tabcolsep}{0.5em}
+
+% Source: https://tex.stackexchange.com/questions/55806/mindmap-tikzpicture-in-beamer-reveal-step-by-step/55849#55849
+%
+% Keys to support piece-wise uncovering of elements in TikZ pictures:
+% \node[visible on=<2->](foo){Foo}
+% \node[visible on=<{2,4}>](bar){Bar}   % put braces around comma expressions
+%
+% Internally works by setting opacity=0 when invisible, which has the
+% advantage (compared to \node<2->(foo){Foo} that the node is always there, hence
+% always consumes space plus that coordinate (foo) is always available.
+%
+% The actual command that implements the invisibility can be overridden
+% by altering the style invisible. For instance \tikzsset{invisible/.style={opacity=0.2}}
+% would dim the "invisible" parts. Alternatively, the color might be set to white, if the
+% output driver does not support transparencies (e.g., PS)
+\tikzset{
+  invisible/.style={opacity=0},
+  visible on/.style={alt={#1{}{invisible}}},
+  alt/.code args={<#1>#2#3}{%
+    \alt<#1>{\pgfkeysalso{#2}}{\pgfkeysalso{#3}} % \pgfkeysalso doesn't change the path
+  },
+}
+
+\renewcommand{\iff}{\leftrightarrow}
+\newcommand{\com}{,\,}
+\newcommand{\orange}[1]{\textcolor{orange}{#1}}
+\newcommand{\blue}[1]{{\usebeamercolor[fg]{palette primary} #1}}
+\newcommand{\grey}[1]{\textcolor{lightgrey}{#1}}
+\newcommand{\mv}[1]{\ensuremath{\mathit{?#1}}}
+\newcommand{\rulename}[1]{\textrm{#1}}
+\newcommand{\rulelabel}[1]{\quad \text{\rulename{#1}}}
+\newcommand{\Expr}{\ensuremath{\mathbb{E}}}
+\newcommand{\Hyps}{\ensuremath{\mathbb{H}}}
+\newcommand{\Matches}{\ensuremath{\mathbb{M}}}
+\newcommand{\Slots}{\ensuremath{\mathbb{S}}}
+\newcommand{\Vars}{\ensuremath{\mathbb{V}}}
+\newcommand{\Pow}[1]{\ensuremath{\mathcal{P}(#1)}}
+\newenvironment{rapppic}{\begin{tikzpicture}[outer sep=auto, level distance=3em]}{\end{tikzpicture}}
+\newenvironment{rapp}{%
+  \begin{tcolorbox}
+  \begin{center}
+  \begin{rapppic}
+}{
+  \end{rapppic}
+  \end{center}
+  \end{tcolorbox}%
+}
+
+\begin{document}
+
+\title{Aesop: White-Box Automation for Lean~4}
+\author{Jannis Limperg\\ University of Munich (LMU)\\ \href{mailto:jannis@limperg.de}{jannis@limperg.de}}
+\date{December 12, 2024}
+
+\setbeamertemplate{footline}[text line]{\parbox{\textwidth}{\centering \url{https://github.com/JLimperg/talk-2024-12-heidelberg-aesop}\medskip}}
+
+\begin{frame}
+  \maketitle
+\end{frame}
+
+\setbeamertemplate{footline}{}
+
+\AtBeginSection{
+  \begin{frame}
+    \usebeamercolor[fg]{frametitle}
+    \Large \center{\insertsection}
+  \end{frame}
+}
+
+\section{Search Algorithm}
+
+\begin{frame}[fragile]
+  \frametitle{Basic Tree Search}
+
+  \begin{center}
+    \begin{tikzpicture}[outer sep=auto, level distance=10mm]
+      \node {$⊢ A → C → A ∧ (B ∨ C)$}
+      child[visible on=<2->] {node[rectangle,draw] {\texttt{intros\strut}}
+        child[visible on=<2->] {node {$A, C ⊢ A ∧ (B ∨ C)$}
+          child[visible on=<3->] {node[rectangle,draw] {\texttt{And.intro\strut}}
+            child[visible on=<3->] {node[xshift=-14mm] {$A, C ⊢ A$}
+              child[visible on=<4->] {node[rectangle,draw] {$A\strut$}}}
+            child[visible on=<3->] {node[xshift=14mm] {$A, C ⊢ B ∨ C$}
+              child[visible on=<5->] {node[rectangle,draw,xshift=-6mm] {\texttt{Or.left\strut}}
+                child[visible on=<5->] {node {$A, C ⊢ B$}}}
+              child[visible on=<6->] {node[rectangle,draw,xshift=6mm]  {\texttt{Or.right\strut}}
+                child[visible on=<6->] {node {$A, C ⊢ C$}
+                  child[visible on=<7->] {node[rectangle,draw] {$C\strut$}}}}}}}};
+    \end{tikzpicture}
+  \end{center}
+\end{frame}
+
+\newcommand*{\sprob}[1]{\blue{\textrm{#1\%}}}
+\newcommand*{\prio}[1]{{\uncover<2->{\orange{\textrm{#1}\%}}}}
+
+\begin{frame}
+  \frametitle{Best-First Tree Search}
+
+  \begin{center}
+    \begin{tikzpicture}[outer sep=auto, level distance=10mm]
+      \node {$⊢ A → C → A ∧ (B ∨ C)$ \prio{100}}
+      child {node[rectangle,draw] {\texttt{intros\strut} \sprob{100}}
+        child {node {$A, C ⊢ A ∧ (B ∨ C)$ \prio{100}}
+          child {node[rectangle,draw] {\texttt{And.intro\strut} \sprob{100}}
+            child {node[xshift=-14mm] {$A, C ⊢ A$ \prio{100}}
+              child {node[rectangle,draw] {$A\strut$ \sprob{100}}}}
+            child {node[xshift=14mm] {$A, C ⊢ B ∨ C$ \prio{100}}
+              child {node[rectangle,draw,xshift=-9mm] {\texttt{Or.left\strut} \sprob{50}}
+                child {node {$A, C ⊢ B$ \prio{50}}}}
+              child {node[rectangle,draw,xshift=9mm]  {\texttt{Or.right\strut} \sprob{50}}
+                child {node {$A, C ⊢ C$ \prio{50}}
+                  child {node[rectangle,draw] {$C\strut$ \sprob{100}}}}}}}}};
+    \end{tikzpicture}
+  \end{center}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Safe Rules}
+
+  \begin{block}{Safe rule: ∧-introduction}
+    \begin{rapp}
+      \node {$Γ ⊢ \orange{A ∧ B}$}
+        child {node {$Γ ⊢ \orange{A}$}}
+        child {node {$Γ ⊢ \orange{B}$}};
+    \end{rapp}
+  \end{block}
+
+  \pause
+
+  \begin{block}{Unsafe rule: left ∨-introduction}
+    \begin{rapp}
+      \node {$Γ ⊢ \orange{A ∨ B}$}
+        child {node {$Γ ⊢ \orange{A}$}};
+    \end{rapp}
+  \end{block}
+\end{frame}
+
+\begin{frame}
+  \frametitle{When Is A Rule Safe?}
+
+  A rule $R$ is \emph{logically safe} if it preserves provability:
+
+  For each goal $G$, if $G$ is provable and $R$, applied to $G$, generates subgoals $G₁, \dots, Gₙ$, then $G₁, \dots, Gₙ$ must still be provable.
+
+  \pause
+
+  A rule $R$ is \emph{relatively safe} if it preserves provability relative to a rule set $S$:
+
+  If a goal $G$ is provable with rules from $S$ and $R$, applied to $G$, generates subgoals $G₁, \dots, Gₙ$, then $G₁, \dots, Gₙ$ must still be provable with rules from $S$.
+\end{frame}
+
+\begin{frame}
+  \frametitle{Normalisation Rules}
+
+  \begin{block}{∧-elimination}
+    \begin{rapp}
+      \node {$\orange{h : A ∧ B} ⊢ T$}
+        child {node {$\orange{h₁ : A},\, \orange{h₂ : B} ⊢ T$}};
+    \end{rapp}
+  \end{block}
+
+  \pause
+
+  An important normalisation rule is the \blue{simplifier}.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Summary: Aesop's Search Algorithm}
+
+  \begin{center}
+    \small
+    \begin{tikzpicture}[outer sep=auto, norm/.style={}, safe/.style={}, unsf/.style={}]
+      \path
+        (0,6)  node[norm]            (norm)        {\blue{Apply normalisation rules}}
+        (0,4)  node[safe]            (safe)        {\blue{Apply safe rules}}
+        (5,4)  node[safe]            (safe-done)   {add subgoals to tree}
+        (0,2)  node[unsf]            (unsafe)      {\blue{Apply unsafe rules}}
+        (-2,0) node[unsf]            (fail)        {can't prove this goal}
+        (4,0)  node[unsf,align=left] (unsafe-done) {add subgoals to tree \\ reinsert goal into goal queue};
+      \draw[<-,norm,loop right, min distance=20mm] (norm.{north east}) to node {progress} (norm.{south east});
+      \draw[->,safe] (norm) -- node[left,xshift=-5mm] {no progress} (safe);
+      \draw[->,safe] (safe) -- node[above] {progress} (safe-done);
+      \draw[->,unsf] (safe) -- node[left,xshift=-5mm] {no progress} (unsafe);
+      \draw[->,unsf] (unsafe) -- node[left,xshift=-5mm] {no progress} (fail);
+      \draw[->,unsf] (unsafe) -- node[right,xshift=5mm] {progress} (unsafe-done);
+    \end{tikzpicture}
+  \end{center}
+\end{frame}
+
+\section{Registering Rules}
+
+\begin{frame}[fragile]
+  \frametitle{Registering Rules}
+
+  \begin{block}{Globally}
+    \begin{leancode}
+      @[aesop unsafe 100%]
+      theorem And.intro : A → B → A ∧ B
+    \end{leancode}
+  \end{block}
+
+  \pause
+
+  \begin{block}{Locally}
+    \begin{leancode}
+      aesop (add 100% And.intro)
+    \end{leancode}
+  \end{block}
+
+  \pause
+
+  \begin{block}{Safe rules}
+    \begin{leancode}
+      @[aesop safe 10]
+      theorem And.intro : A → B → A ∧ B
+    \end{leancode}
+  \end{block}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Rule Builders}
+
+  A \emph{rule builder} turns a declaration into an Aesop rule.
+
+  In the examples so far, we have implicitly used a default builder.
+
+  Aesop currently provides 7 rule builders.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Apply Builder}
+
+  \begin{leancode}
+    @[aesop safe apply 10]
+    theorem And.intro : A → B → A ∧ B
+  \end{leancode}
+
+  \pause
+
+  Builds a rule that runs \lean{apply And.intro}.
+
+  \begin{rapp}
+    \node {$Γ ⊢ \orange{A ∧ B}$}
+      child {node {$Γ ⊢ \orange{A}$}}
+      child {node {$Γ ⊢ \orange{B}$}};
+  \end{rapp}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Constructors Builder}
+
+  \begin{leancode}
+    @[aesop 50% constructors]
+    inductive Or (A B : Prop) where
+      | left  : A → Or A B
+      | right : B → Or A B
+  \end{leancode}
+
+  Equivalent to one \lean{apply} rule for each constructor.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Cases Builder}
+
+  \begin{leancode}
+    @[aesop safe cases]
+    inductive Or (A B : Prop) where
+      | left  : A → Or A B
+      | right : B → Or A B
+  \end{leancode}
+
+  Builds a rule that runs \lean{cases} on any hypothesis of type \lean{Or A B}.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Forward Builder}
+
+  \begin{leancode}
+    @[aesop safe forward]
+    theorem pos_of_min_pos : ∀ {x y : ℕ},
+      0 < min x y →
+      0 < x ∧ 0 < y
+  \end{leancode}
+
+  \begin{rapp}
+    \node {$Γ,\, x\, y : ℕ,\, h : 0 < \mathrm{min}~x~y ⊢ T$}
+      child {node {$Γ,\, x\, y : ℕ,\, h : 0 < \mathrm{min}~x~y,\, \orange{h₁ : 0 < x ∧ 0 < y} ⊢ T$}};
+  \end{rapp}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Destruct Builder}
+
+  \begin{leancode}
+    @[aesop safe destruct]
+    theorem pos_of_min_pos : ∀ {x y : ℕ},
+      0 < min x y →
+      0 < x ∧ 0 < y
+  \end{leancode}
+
+  \begin{rapp}
+    \node {$Γ,\, x\, y : ℕ,\, \orange{h : 0 < \mathrm{min}~x~y} ⊢ T$}
+      child {node {$Γ,\, x\, y : ℕ,\, \orange{h : 0 < x ∧ 0 < y} ⊢ T$}};
+  \end{rapp}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Simp Builder}
+
+  Aesop runs \lean{simp_all} as a built-in normalisation rule with penalty 0.
+
+  This \lean{simp_all} call uses the default \lean{simp} set plus an
+  Aesop-specific \lean{simp} set.
+
+  The \lean{simp} builder adds an equation or proposition to this Aesop-specific
+  set.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Tactic Builder}
+
+  \begin{leancode}
+    aesop (add safe (by norm_num; done))
+  \end{leancode}
+
+  \pause
+
+  \begin{leancode}
+    add_aesop_rules safe (by norm_num; done)
+  \end{leancode}
+
+  \pause
+  \bigskip
+
+  \begin{block}{Requirement}
+    If the tactic does not change the goal, it should fail.
+  \end{block}
+\end{frame}
+
+\section{Built-In Rules}
+
+\begin{frame}
+  \frametitle{Logic}
+
+  Built-in rules perform \enquote{obvious} operations for each logical connective.
+
+  \begin{itemize}
+    \item For goal \lean{⊢ A ∧ B}, split into \lean{⊢ A} and \lean{⊢ B}.
+    \item For goal \lean{h : A ∧ B ⊢ T}, split hypothesis into \lean{h₁ : A} and \lean{h₂ : B}.
+    \item For goal \lean{h : ∃ (x : α), P x ⊢ T}, split hypothesis into \lean{w : α} and \lean{h : P w}.
+    \item \dots
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Equality}
+
+  \begin{block}{Simplifier (norm, penalty 0)}
+    Run the \lean{simp_all} tactic as described previously
+  \end{block}
+
+  \pause
+
+  \begin{block}{Reflexivity (safe, penalty 0)}
+    Run the \lean{rfl} tactic
+  \end{block}
+
+  \pause
+
+  \begin{block}{Substitution (norm, penalty -50)}
+    Run the \lean{subst} tactic on any hypothesis of type \lean{x = t} or \lean{t = x} where \lean{x} is a variable (and \lean{x} does not occur in \lean{t}).
+
+    This substitutes \lean{t} for \lean{x} everywhere in the goal and removes the now-redundant hypothesis.
+  \end{block}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Case Splitting}
+
+  \begin{block}{Split target (safe, penalty 100)}
+    Runs the \lean{split} tactic.
+
+    This tactic looks for \lean{if-then-else} and \lean{match} expressions in the target and performs case splits on their discriminees.
+  \end{block}
+
+  \pause
+
+  \begin{block}{Split hypotheses (safe, penalty 1000)}
+    Ditto, but we look for case splits in hypotheses.
+  \end{block}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Extensionality}
+
+  \begin{block}{Extensionality (unsafe, success probability 80\%)}
+    Run the \lean{ext} tactic.
+
+    This exhaustively applies extensionality lemmas to an equational goal. E.g.:
+
+    \begin{rapp}
+      \node {$Γ,\, p\, q : A × B ⊢ \orange{p = q}$}
+        child {node {$Γ,\, p\, q : A × B ⊢ \orange{p.1 = q.1 ∧ p.2 = q.2}$}};
+    \end{rapp}
+  \end{block}
+\end{frame}
+
+\section{Debugging}
+
+\begin{frame}
+  \frametitle{Leftover Goals}
+
+  When Aesop fails to solve a goal, it reports the goals that remain
+  after safe rules have been exhaustively applied.
+
+  This helps to check whether the safe rules do what you think they should.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Proof Script Generation}
+
+  \begin{leancode}
+    theorem head?_append_of_ne_nil (l₁ l₂ : List α), l₁ ≠ [] →
+        head? (l₁ ++ l₂) = head? l₁ := by
+      aesop? (add norm simp head?)
+  \end{leancode}
+
+  \pause
+
+  \lean{aesop?} generates a proof script:
+
+  \begin{leancode}
+    intro l₁ l₂ x
+    simp_all only [ne_eq, head?]
+    split
+    next x_1 heq ⇒
+      simp_all only [append_eq_nil, false_and]
+    next x_1 a as heq ⇒
+      split
+      next x_2 ⇒
+        subst heq
+        simp_all only [not_true_eq_false]
+      next x_2 a_1 as_1 ⇒
+        simp_all only [reduceCtorEq, ...]
+        intro h
+  \end{leancode}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Tracing}
+
+  \begin{leancode}
+    set_option trace.aesop true in
+    aesop
+  \end{leancode}
+
+  \pause
+
+  \begin{itemize}[<+->]
+    \item Lists the rules that Aesop (tried to) run and the resulting goals
+    \item For other trace options see autocompletion for \texttt{trace.aesop.}
+  \end{itemize}
+\end{frame}
+
+\section{Search with Metavariables}
+
+\begin{frame}[fragile]
+  \frametitle{Metavariables}
+
+  \begin{leancode}
+    example {a b c d : Nat} (h₁ : a < b)
+        (h₂ : a < c) (h₃ : c < d) : a < d := by
+      apply Nat.lt_trans
+      -- ⊢ a < ?x
+      -- ⊢ ?x < d
+
+    example {a b c d : Nat} (h₁ : a < b)
+        (h₂ : a < c) (h₃ : c < d) : a < d := by
+      aesop (add 1% Nat.lt_trans)
+  \end{leancode}
+\end{frame}
+
+\section{Efficient Forward Reasoning}
+
+\begin{frame}[fragile]
+  \frametitle{Forward Rules}
+
+  \begin{leancode}
+    @[aesop safe forward]
+    theorem pos_of_min_pos_l : 0 < min n m → 0 < n
+  \end{leancode}
+
+  \begin{tcolorbox}
+    \begin{center}
+      \begin{tikzpicture}[level distance=8em]
+      \node {$\begin{array}{l} n~m : ℕ \\ h : 0 < \mathrm{min}~n~m \\ ⊢ T \end{array}$}
+        child {node {$\begin{array}{l} n~m : ℕ \\ h : 0 < \mathrm{min}~n~m \\ \orange{h' : 0 < n} \\ ⊢ T \end{array}$}};
+      \end{tikzpicture}
+    \end{center}
+  \end{tcolorbox}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Running Example}
+
+  \begin{leancode}
+    axiom R : ℕ → ℕ → Prop
+
+    @[aesop safe forward]
+    axiom trans : ∀ x y z, R x y → R y z → R x z
+
+    example
+        (h₁ : R 300 301)
+        (h₂ : R 301 302)
+        (h₃ : R 302 303) :
+        R 300 303 := by
+      aesop
+  \end{leancode}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Naive Algorithm}
+
+  \begin{enumerate}[<+->]
+    \item $R~y~z ≟ R~300~301 ⇒ \{y ↦ 300, z ↦ 301\}$ \good
+          \begin{enumerate}[<+->]
+            \item $R~x~y ≟ R~300~301 ⇒ \{x ↦ 300, y ↦ 301\}$ \bad
+            \item $R~x~y ≟ R~301~302 ⇒ \{x ↦ 301, y ↦ 302\}$ \bad
+            \item $R~x~y ≟ R~302~303 ⇒ \{x ↦ 302, y ↦ 303\}$ \bad
+          \end{enumerate}
+    \item $R~y~z ≟ R~301~302 ⇒ \{y ↦ 301, z ↦ 302\}$ \good
+          \begin{enumerate}[<+->]
+            \item $R~x~y ≟ R~300~301 ⇒ \{x ↦ 300, y ↦ 301\}$ \good \\
+                  \orange{new hypothesis:} $h_{4} : R~300~302$
+          \end{enumerate}
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Naive Algorithm}
+
+  \begin{block}{New goal}
+    \begin{leancode}
+        (h₁ : R 300 301)
+        (h₂ : R 301 302)
+        (h₃ : R 302 303)
+        (h₄ : R 300 302) :
+        ⊢ R 300 303
+    \end{leancode}
+  \end{block}
+\end{frame}
+
+\begin{frame}
+  \begin{enumerate}[<+->]
+    \item $R~y~z ≟ R~300~301 ⇒ \{y ↦ 300, z ↦ 301\}$ \good
+          \begin{enumerate}[<+->]
+            \item $R~x~y ≟ R~300~301 ⇒ \{x ↦ 300, y ↦ 301\}$ \bad
+            \item \dots
+          \end{enumerate}
+    \item $R~y~z ≟ R~301~302 ⇒ \{y ↦ 301, z ↦ 302\}$ \good
+          \begin{enumerate}[<+->]
+            \item $R~x~y ≟ R~300~301 ⇒ \{x ↦ 300, y ↦ 301\}$ \orange{already exists}
+            \item $R~x~y ≟ R~301~302 ⇒ \{x ↦ 301, y ↦ 302\}$ \bad
+            \item \dots
+          \end{enumerate}
+    \item $R~y~z ≟ R~302~303 ⇒ \{y ↦ 302, z ↦ 303\}$ \good
+          \begin{enumerate}
+            \item \dots
+          \end{enumerate}
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Central Issue}
+
+  The naive algorithm is \orange{stateless}.
+
+  This leads to lots of \orange{duplicate work}.
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Stateful Algorithm Interface}
+
+  \begin{leancode}
+    addHyp   : State → Hyp → State × List NewHyp
+    eraseHyp : State → Hyp → State
+  \end{leancode}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Rule Terminology}
+
+  \[
+    \mathrm{trans} : ∀ x~y~z~(p₁ : R~x~y)~(p₂ : R~y~z),\, R~x~z
+  \]
+
+  $x, y, z$ are determined by a match for $p₁$ and $p₂$.
+
+  $p₁$ and $p₂$ are the \emph{slots} of $\mathrm{trans}$.
+
+  They are connected by the \emph{shared variable} $y$.
+\end{frame}
+
+\begin{frame}
+  \frametitle{Matches}
+
+  \[
+    \mathrm{trans} : ∀ x~y~z~(p₁ : R~x~y)~(p₂ : R~y~z),\, R~x~z
+  \]
+
+  A \emph{complete match} for $\mathrm{trans}$ is a substitution
+  \[
+    \{1 ↦ t, 2 ↦ u\}
+  \]
+  such that $t : R~a~b$ (matching $p₁$) and $u : R~c~d$ (matching $p₂$) with $b = c$.
+
+  \pause
+
+  A \emph{partial match} is a substitution for some nonempty subset of the slots.
+\end{frame}
+
+\begin{frame}
+  \frametitle{Core Algorithm Idea}
+
+  \blue{Iteratively fill the matches}: find a hypothesis for slot 1, then find a hypothesis for slot 2 that agrees on the shared variables, \dots
+
+  When a new hypothesis comes in, \blue{extend the matches} that agree with this hypothesis.
+
+  \blue{Store the partially filled matches} in the state.
+\end{frame}
+
+\begin{frame}
+  \frametitle{Rule State}
+
+  The \emph{rule state} for $\mathrm{trans}$ is a pair of maps
+  \begin{align*}
+    H(s, v, e) &↦ \{h₁, \dots, hₖ\} \\
+    M(s, v, e) &↦ \{m₁, \dots, mₗ\}
+  \end{align*}
+  where
+  \begin{itemize}
+    \item $s$ is a slot index of $\mathrm{trans}$ (i.e.\ $s ∈ \{1,2\}$)
+    \item $v$ is a shared variable (i.e.\ $v ∈ \{y\}$)
+    \item $e$ is a Lean expression
+    \item $h₁, \dots, hₖ$ are hypotheses
+    \item $m₁, \dots, mₗ$ are matches
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Hypothesis Map}
+
+  $h ∈ H(s, v, e)$ iff \\
+  the type of $h$ matches the type of slot $s$ \\
+  with variable $v$ instantiated by $e$.
+
+  \pause
+
+  \begin{example}
+    Given $h₁ : R~300~301$
+    \begin{align*}
+      h₁ &∈ H(1, y, 301) \\
+      h₁ &∈ H(2, y, 300) \\
+    \end{align*}
+  \end{example}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Match Map}
+
+  $m ∈ M(s, v, e)$ iff \\
+  all slots $≤ s$ are assigned in $m$ \\
+  all slots $> s$ are unassigned in $m$ \\
+  with variable $v$ instantiated by $e$.
+
+  \pause
+
+  \begin{example}
+    Given $h₁ : R~300~301$, $m = \{1 ↦ h₁\}$
+    \begin{align*}
+      m &∈ M(1, y, 301) \\
+    \end{align*}
+  \end{example}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Adding a Hypothesis: Example}
+
+  $\mathrm{trans} : R~x~y → R~y~z → R~x~z$
+
+  $h₂ : R~301~302$, $h₁ : R~300~301$
+
+  \begin{tikzpicture}[outer sep=auto, level distance=10mm]
+    \node {$H$}
+      child {node[xshift=-.3cm] {1}
+        child[] {node {$y$}
+          child[visible on=<2->] {node[xshift=.3cm] {$302$}
+            child {node {$\{h₂\}$}}}
+          child[visible on=<5->] {node[xshift=-.3cm] {$301$}
+            child {node {$\{h₁\}$}}}}}
+      child {node[xshift=.3cm] {2}
+        child {node {$y$}
+          child[visible on=<4->] {node[xshift=.3cm] {$301$}
+            child {node {$\{h₂\}$}}}
+          child[visible on=<8->] {node[xshift=-.3cm] {$300$}
+            child {node {$\{h₁\}$}}}}};
+    \node[xshift=5.5cm] {$M$}
+      child {node[xshift=-.4cm] {1}
+        child {node {$y$}
+          child[visible on=<3->, xshift=-.3cm] {node {$302$}
+            child {node {$\{\{1 ↦ h₂\}\}$}}}
+          child[visible on=<6->, xshift=.3cm] {node {$301$}
+            child {node {$\{\{1 ↦ h₁\}\}$}}}}}
+      child {node[xshift=.4cm] {2}
+        child {node {$y$}
+          child[visible on=<7->] {node {$301$}
+            child {node[yshift=-2em] {$\{\{1 ↦ h₁, 2 ↦ h₂\}\}$}}}}};
+  \end{tikzpicture}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Adding a Hypothesis: Algorithm}
+
+  Given a new hypothesis $h : T$, \\
+  for each slot $s$ such that $T$ matches the type of $s$:
+  \begin{enumerate}[<+->]
+    \item Add $h$ to $H(s, v, e)$ for each shared variable $v$.
+    \item Get the matches in slot $s-1$ that agree with $h$ on the shared
+          variables.
+          Extend these matches with $h$ and add them to $M(s, v, e)$ for each $v$.
+    \item For each extended match $m$, get the hypotheses in slot $s + 1$ that
+          agree with $m$. Extend the matches again and add them to $M$.
+    \item Repeat with slots $s + 2$, $s + 3$, \dots
+    \item If a match is completed, report it as a new hypothesis.
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Benchmark Setup}
+
+  \begin{leancode}
+    @[aesop safe forward]
+    axiom trans : ∀ x y z, R x y → R y z → R x z
+
+    example
+      (h₁ : R 300 301)
+      (h₂ : R 301 302)
+      ...
+      (hₙ : R (300 + n - 1) (300 + n)) :
+      True
+  \end{leancode}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Benchmark Results}
+
+  \medskip
+  \begin{center}
+    \begin{tabular}{rrr}
+      $n$ & \text{new} & \text{old} \\
+      \toprule
+      10  & \SI{55}{ms} & \SI{1}{m} \\
+      20  & \SI{210}{ms} & \SI{18}{m} \\
+      30  & \SI{470}{ms} & \text{?} \\
+      40  & \SI{860}{ms} & \text{?} \\
+    \end{tabular}
+  \end{center}
+\end{frame}
+
+\begin{frame}
+  \centering{\Huge{\blue{Thanks!}}}
+  % TODO Links/QR codes for these slides, Aesop repo, my CV
+\end{frame}
+
+\end{document}
