@@ -79,6 +79,8 @@
 \newcommand{\Slots}{\ensuremath{\mathbb{S}}}
 \newcommand{\Vars}{\ensuremath{\mathbb{V}}}
 \newcommand{\Pow}[1]{\ensuremath{\mathcal{P}(#1)}}
+\newcommand{\dom}[1]{\ensuremath{\mathrm{dom}(#1)}}
+\newcommand{\cod}[1]{\ensuremath{\mathrm{cod}(#1)}}
 \newenvironment{rapppic}{\begin{tikzpicture}[outer sep=auto, level distance=3em]}{\end{tikzpicture}}
 \newenvironment{rapp}{%
   \begin{tcolorbox}
@@ -660,7 +662,9 @@
 
   \pause
 
-  A \emph{partial match} is a substitution for some nonempty subset of the slots.
+  A \emph{partial match} is a substitution for some nonempty prefix of the slots.
+
+  I.e.\ if $s ∈ \dom{m}$, then $s' ∈ \dom{m}$ for all $s' < s$.
 \end{frame}
 
 \begin{frame}
@@ -696,7 +700,7 @@
 
   $h ∈ H(s, v, e)$ iff \\
   the type of $h$ matches the type of slot $s$ \\
-  with variable $v$ instantiated by $e$.
+  and variable $v$ is instantiated by $e$.
 
   \pause
 
@@ -713,9 +717,8 @@
   \frametitle{Match Map}
 
   $m ∈ M(s, v, e)$ iff \\
-  all slots $≤ s$ are assigned in $m$ \\
-  all slots $> s$ are unassigned in $m$ \\
-  with variable $v$ instantiated by $e$.
+  $s$ is the greatest slot in $\dom{m}$ \\
+  and variable $v$ is instantiated by $e$.
 
   \pause
 
